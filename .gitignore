@@ -1,0 +1,28 @@
+# Build
+gateway/target/
+*.class
+*.jar
+
+# Database
+*.mv.db
+*.trace.db
+data/
+gateway/data/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Internal docs (not for public sharing)
+aidlc-docs/
+
+# Anthropic proprietary specs
+anthropic-openapi.yaml
+anthropic-sdk-python-api.md
+anthropic-sdk-typescript-api.md
+2026-03-27-anthropic-api-vs-bedrock-invoke-model-comparison.md

@@ -1,0 +1,63 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/gateway-metering
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+gateway:
+  api-keys:
+    - key: "gw-test-key-001"
+      name: "Default Test Key"
+      rate-limit-per-minute: 60
+      route: "default"
+
+  accounts:
+    default:
+      region: "us-east-1"
+      # Uses default credential chain. For cross-account, set role-arn:
+      # role-arn: "arn:aws:iam::123456789:role/bedrock-access"
+
+  model-mapping:
+    claude-sonnet-4-5-20250929: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    claude-sonnet-4-6: "global.anthropic.claude-sonnet-4-6"
+    claude-opus-4-6: "global.anthropic.claude-opus-4-6-v1"
+    claude-opus-4-5-20251101: "global.anthropic.claude-opus-4-5-20251101-v1:0"
+    claude-haiku-4-5-20251001: "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    claude-sonnet-4-20250514: "global.anthropic.claude-sonnet-4-20250514-v1:0"
+    # These don't have global profiles yet, use us. prefix
+    claude-opus-4-1-20250805: "us.anthropic.claude-opus-4-1-20250805-v1:0"
+    claude-opus-4-20250514: "us.anthropic.claude-opus-4-20250514-v1:0"
+    claude-3-7-sonnet-20250219: "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+    claude-3-5-sonnet-20241022: "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+  # Bedrock supported beta flags whitelist
+  # Source: https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html
+  # Flags not in this list will be silently filtered out before forwarding to Bedrock.
+  supported-beta-flags:
+    - "computer-use-2025-01-24"
+    - "computer-use-2024-10-22"
+    - "token-efficient-tools-2025-02-19"
+    - "interleaved-thinking-2025-05-14"
+    - "output-128k-2025-02-19"
+    - "dev-full-thinking-2025-05-14"
+    - "context-1m-2025-08-07"
+    - "context-management-2025-06-27"
+    - "effort-2025-11-24"
+    - "tool-search-tool-2025-10-19"
+    - "tool-examples-2025-10-29"
+    - "fine-grained-tool-streaming-2025-05-14"
+
+  logging:
+    log-request-body: false
+    log-response-body: false
+    log-usage: true
+
+logging:
+  level:
+    com.github.bedrockgateway.transform: INFO
