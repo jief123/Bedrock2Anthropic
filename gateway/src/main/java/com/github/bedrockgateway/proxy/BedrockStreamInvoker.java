@@ -1,6 +1,8 @@
 package com.github.bedrockgateway.proxy;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,22 +13,33 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.bedrockgateway.routing.RouteDecision;
 
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
+import reactor.core.scheduler.Schedulers;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelWithResponseStreamRequest;
 import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelWithResponseStreamResponseHandler;
 
 /**
  * Handles streaming invocation: Bedrock EventStream → SSE events.
- * Each EventStream chunk payload is a JSON object with a "type" field
- * that maps directly to Anthropic SSE event types.
+ * 
+ * Bedrock's EventStream has no keepalive/ping mechanism, unlike Anthropic's SSE API
+ * which sends "event: ping" events. During long thinking phases, no data flows and
+ * clients/proxies may timeout. This class injects periodic SSE ping events to keep
+ * the connection alive.
+ * 
+ * See: https://platform.claude.com/docs/en/build-with-claude/streaming#ping-events
  */
 @Service
 public class BedrockStreamInvoker {
 
     private static final Logger log = LoggerFactory.getLogger(BedrockStreamInvoker.class);
     private static final ObjectMapper mapper = new ObjectMapper();
+
+    /** Anthropic-compatible SSE ping event to keep connections alive */
+    private static final String SSE_PING = "event: ping\ndata: {\"type\": \"ping\"}\n\n";
+    private static final Duration PING_INTERVAL = Duration.ofSeconds(15);
 
     /**
      * Returns a Flux of SSE-formatted strings: "event: {type}\ndata: {json}\n\n"
@@ -104,10 +117,25 @@ public class BedrockStreamInvoker {
         CompletableFuture<Void> bedrockFuture = route.client()
                 .invokeModelWithResponseStream(request, handler);
 
+        // Ping keepalive: Bedrock EventStream has no ping mechanism.
+        // Anthropic's SSE API sends "event: ping" to keep connections alive during
+        // long thinking phases. We replicate this behavior in the gateway.
+        AtomicBoolean streamDone = new AtomicBoolean(false);
+        Disposable pingTask = Flux.interval(PING_INTERVAL)
+                .takeWhile(i -> !streamDone.get())
+                .subscribeOn(Schedulers.parallel())
+                .subscribe(i -> sink.tryEmitNext(SSE_PING));
+
         // E18: Cancel Bedrock call when client disconnects (subscriber cancels)
         return sink.asFlux()
+                .doOnComplete(() -> {
+                    streamDone.set(true);
+                    pingTask.dispose();
+                })
                 .doOnCancel(() -> {
                     log.info("Client disconnected, cancelling Bedrock stream");
+                    streamDone.set(true);
+                    pingTask.dispose();
                     bedrockFuture.cancel(true);
                     sink.tryEmitComplete();
                 });

@@ -518,6 +518,8 @@ asyncClient.invokeModelWithResponseStream(request, handler).join();</pre>
   </table>
 
   <div class="warn"><strong>Bedrock 额外字段</strong>：<code>message_stop</code> 事件中会包含 <code>amazon-bedrock-invocationMetrics</code>（含 inputTokenCount、outputTokenCount、invocationLatency 等）。Anthropic API 没有这个字段。</div>
+
+  <div class="warn"><strong>Bedrock 没有 ping 保活</strong>：Anthropic SSE API 在模型思考期间会发送 <code>event: ping</code> 事件（<a href="https://platform.claude.com/docs/en/build-with-claude/streaming#ping-events">文档</a>），防止中间链路超时断开。Bedrock EventStream 没有等效机制。做 proxy 时需要自己注入 ping 事件。</div>
 </section>
 
 <!-- ===== Compat ===== -->
@@ -574,6 +576,12 @@ asyncClient.invokeModelWithResponseStream(request, handler).join();</pre>
     <div class="n">实测 · Bedrock 400 "invalid beta flag"</div>
     <h4>Bedrock 只接受白名单内的 beta flags</h4>
     <p>Anthropic SDK 和 Claude Code 会发送 Bedrock 不认识的 beta flags（如 <code>claude-code-20250219</code>、<code>redact-thinking-2026-02-12</code>、<code>prompt-caching-scope-2026-01-05</code>）。原样透传会导致 Bedrock 返回 400 "invalid beta flag"。做 proxy 必须用白名单过滤，只保留 <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-anthropic-claude-messages-request-response.html">Bedrock 官方文档</a>列出的 flags。</p>
+  </div>
+
+  <div class="pit">
+    <div class="n">协议差异 · 连接超时</div>
+    <h4>Bedrock 流式没有 ping 保活，长 thinking 会导致超时</h4>
+    <p>Anthropic SSE API 会在模型思考期间发送 <code>event: ping</code> 事件保持连接活跃（<a href="https://platform.claude.com/docs/en/build-with-claude/streaming#ping-events">官方文档</a>）。Bedrock EventStream 没有这个机制。当模型做长时间 extended thinking 时，可能几十秒没有数据返回，中间的代理、负载均衡器或客户端会因超时断开连接。做 proxy 需要自己实现 ping 注入。</p>
   </div>
 </section>
 
